@@ -2,10 +2,13 @@
 # Old tester compilation command
 # pyinstaller --onefile --windowed --name="BatteryTester" guimin.py
 
+from PyQt6.QtWidgets import (QApplication, QMainWindow)
+from PyQt6.QtCore import QSize
+
 import pyvisa
 import time
 
-
+'''
 currLimit = 4.0
 constPower = 62.0
 stopVoltage = 0.1
@@ -55,23 +58,27 @@ inst.write("INP OFF")
 inst.write("SYST:LOC")
 inst.close()
 rm.close()
-
+'''
 
 
 # ====================================
 
+# Necessary variables
 currLimit = 4.0
 constPower = 62.0
 stopVoltage = 0.1
 
+# Temp storage values in case of failure
 monitorVoltage = 0.0
 monitorCurrent = 0.0
 monitorPower = 0.0
 
+# Stored values to be written to file
 recordVoltage = 0.0
 recordCurrent = 0.0
 recordPower = 0.0
 
+#
 def monitor(record):
     status = int(inst.query("STAT:QUES:COND?"))
 
@@ -82,11 +89,16 @@ def monitor(record):
         recordVoltage = monitorVoltage
         recordCurrent = monitorCurrent
         recordPower = monitorPower
+        # Stop Test
 
     else:
         v = float(inst.query("MEAS:VOLT?"))
         c = float(inst.query("MEAS:CURR?"))
         p = float(inst.query("FETC:POW?"))
+
+        if v < stopVoltage:
+            # Stop Test
+            return
 
         monitorVoltage = v
         monitorCurrent = c
@@ -103,3 +115,16 @@ def loadOFF():
     inst.write("SYST:LOC")
     inst.close()
     rm.close()
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Battery Load Tester")
+        set.setFixedSize(QSize(400, 600))
+        
+
+app = QApplication([])
+window = MainWindow()
+window.show()
+app.exec()
