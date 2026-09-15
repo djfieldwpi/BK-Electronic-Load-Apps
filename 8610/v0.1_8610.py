@@ -16,7 +16,7 @@ CONFIG_FILE = Path.home() / "BatteryTester" / "8610_settings.json"
 CONFIG_FILE.parent.mkdir(exist_ok=True)
 
 def load_settings():
-    global defaultPath, defaultCurrLimit, defaultLimitDelay, defaultConstPower, defaultStopVoltage, defaultMonitorTime, defaultRecordTime
+    global defaultPath, defaultCurrLimit, defaultLimitDelay, defaultConstCurr, defaultConstPower, defaultStopVoltage, defaultMonitorTime, defaultRecordTime
 
     if not CONFIG_FILE.exists():
         return
@@ -27,6 +27,7 @@ def load_settings():
     defaultPath = data.get("defaultPath", "")
     defaultCurrLimit = data.get("defaultCurrLimit", 0.0)
     defaultLimitDelay = data.get("defaultLimitDelay", 0.0)
+    defaultConstCurr = data.get("defaultConstCurr", 0.0)
     defaultConstPower = data.get("defaultConstPower", 0.0)
     defaultStopVoltage = data.get("defaultStopVoltage", 0.0)
     defaultMonitorTime = data.get("defaultMonitorTime", 1.0)
@@ -37,6 +38,7 @@ def save_settings():
         "defaultPath": defaultPath,
         "defaultCurrLimit": defaultCurrLimit,
         "defaultLimitDelay": defaultLimitDelay,
+        "defaultConstCurr": defaultConstCurr,
         "defaultConstPower": defaultConstPower,
         "defaultStopVoltage": defaultStopVoltage,
         "defaultMonitorTime": defaultMonitorTime,
@@ -49,6 +51,7 @@ def save_settings():
 defaultPath = ""
 defaultCurrLimit = 0.0
 defaultLimitDelay = 0.0
+defaultConstCurr = 0.0
 defaultConstPower = 0.0
 defaultStopVoltage = 0.0
 defaultMonitorTime = 1.0
@@ -60,6 +63,7 @@ class MainWindow(QMainWindow):
 
         # Misc
         self.started = False
+        self.powMode = True
         self.testTimer = QTimer(self)
         self.testTimer.timeout.connect(self.testLoop)
         self.lastMonitor = 0.0
@@ -86,13 +90,14 @@ class MainWindow(QMainWindow):
         self.filePath = ""
 
         self.setWindowTitle("Battery Load Tester")
-        self.setFixedSize(QSize(600, 550))
+        self.setFixedSize(QSize(600, 600))
 
         # Overall Layout
         vLayout = QVBoxLayout()
         fileLayout = QHBoxLayout()
         limitLayout = QHBoxLayout()
         delayLayout = QHBoxLayout()
+        overLayout = QHBoxLayout()
         constLayout = QHBoxLayout()
         stopLayout = QHBoxLayout()
         buttonLayout = QHBoxLayout()
@@ -106,6 +111,7 @@ class MainWindow(QMainWindow):
         vLayout.addLayout(fileLayout)
         vLayout.addLayout(limitLayout)
         vLayout.addLayout(delayLayout)
+        vLayout.addLayout(overLayout)
         vLayout.addLayout(constLayout)
         vLayout.addLayout(stopLayout)
         vLayout.addLayout(monitorLayout)
@@ -176,6 +182,22 @@ class MainWindow(QMainWindow):
 
         delayLayout.addWidget(self.delayLabel)
         delayLayout.addWidget(self.delayEntry)
+
+        # Constant Current Layout
+        self.overLabel = QLabel("<b style=\"font-size: 20px\">Constant Current:</b>")
+        self.overEntry = QLineEdit()
+        self.overEntry.setStyleSheet("""
+                                    QLineEdit{
+                                    font-size: 20px
+                                    }
+                                    """)
+        self.overEntry.setPlaceholderText(str(defaultConstCurr) + " A")
+        self.overEntry.setValidator(QDoubleValidator())
+        self.overEntry.setEnabled(not self.started)
+        self.overEntry.setMaximumWidth(200)
+
+        overLayout.addWidget(self.overLabel)
+        overLayout.addWidget(self.overEntry)
 
         # Constant Power Layout
         self.constLabel = QLabel("<b style=\"font-size: 20px\">Constant Power:</b>")
@@ -314,6 +336,7 @@ class MainWindow(QMainWindow):
         self.fileEntry.setEnabled(not self.started)
         self.testEntry.setEnabled(not self.started)
         self.limitEntry.setEnabled(not self.started)
+        self.overEntry.setEnabled(not self.started)
         self.delayEntry.setEnabled(not self.started)
         self.constEntry.setEnabled(not self.started)
         self.stopEntry.setEnabled(not self.started)
@@ -370,6 +393,14 @@ class MainWindow(QMainWindow):
                 self.recordStatus = "Voltage below Stop Threshold"
                 return False
 
+            if c > defaultConstCurr and self.powMode:
+                self.inst.write("FUNC CURR")
+                self.inst.write("CURR " + str(defaultConstCurr))
+                self.powMode = False
+                self.record()
+                self.recordStatus = "Constant Current"
+                return True
+
             self.monitorVoltage = v
             self.monitorCurrent = c
             self.monitorPower = p
@@ -388,13 +419,14 @@ class MainWindow(QMainWindow):
         sheet.title = self.testEntry.text()
         sheet["A1"] = "Test ID"
         sheet["B1"] = "Current Limit"
-        sheet["C1"] = "Constant Power"
-        sheet["D1"] = "Stop Voltage"
-        sheet["E1"] = "Time"
-        sheet["F1"] = "Voltage"
-        sheet["G1"] = "Current"
-        sheet["H1"] = "Power"
-        sheet["I1"] = "Status"
+        sheet["C1"] = "Constant Current"
+        sheet["D1"] = "Constant Power"
+        sheet["E1"] = "Stop Voltage"
+        sheet["F1"] = "Time"
+        sheet["G1"] = "Voltage"
+        sheet["H1"] = "Current"
+        sheet["I1"] = "Power"
+        sheet["J1"] = "Status"
         self.wb.save(self.filePath)
 
     def record(self):
@@ -402,6 +434,7 @@ class MainWindow(QMainWindow):
         sheet.append([
             self.testEntry.text(),
             float(defaultCurrLimit),
+            float(defaultConstCurr),
             float(defaultConstPower),
             float(defaultStopVoltage),
             datetime.now(),
@@ -413,7 +446,7 @@ class MainWindow(QMainWindow):
         self.wb.save(self.filePath)
 
     def setDefaults(self):
-        global defaultPath, defaultCurrLimit, defaultLimitDelay, defaultConstPower, defaultStopVoltage, defaultMonitorTime, defaultRecordTime
+        global defaultPath, defaultCurrLimit, defaultLimitDelay, defaultConstCurr, defaultConstPower, defaultStopVoltage, defaultMonitorTime, defaultRecordTime
 
         success = True
 
@@ -430,6 +463,8 @@ class MainWindow(QMainWindow):
                 success = False
             else:
                 defaultLimitDelay = temp
+        if self.overEntry.text().strip():
+            defaultConstCurr = float(self.overEntry.text())
         if self.constEntry.text().strip():
             defaultConstPower = float(self.constEntry.text())
         if self.stopEntry.text().strip():
@@ -530,8 +565,11 @@ class MainWindow(QMainWindow):
     def end(self):
         self.wb.close()
         self.testTimer.stop()
-        self.inst.write("POW 0")
         self.inst.write("INP OFF")
+        if self.powMode:
+            self.inst.write("POW 0")
+        else:
+            self.inst.write("CURR 0")
         self.inst.write("SYST:LOC")
         self.inst.close()
         self.rm.close()
