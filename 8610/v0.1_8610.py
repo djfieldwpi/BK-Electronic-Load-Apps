@@ -570,6 +570,7 @@ class MainWindow(QMainWindow):
             self.inst.write("POW 0")
         else:
             self.inst.write("CURR 0")
+            self.powMode = True
         self.inst.write("SYST:LOC")
         self.inst.close()
         self.rm.close()
